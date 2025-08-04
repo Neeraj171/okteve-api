@@ -1,17 +1,28 @@
-from fastapi import FastAPI
-from fastapi.responses import PlainTextResponse
-import requests
-from bs4 import BeautifulSoup
+const chromium = require('@sparticuz/chromium');
+const puppeteer = require('puppeteer-core');
 
-app = FastAPI()
+module.exports = async (req, res) => {
+  const browser = await puppeteer.launch({
+    args: chromium.args,
+    defaultViewport: chromium.defaultViewport,
+    executablePath: await chromium.executablePath(),
+    headless: chromium.headless,
+  });
+  const page = await browser.newPage();
+  await page.goto('https://okteve.com/channels', { waitUntil: 'networkidle2' });
+  const channels = await page.evaluate(() => {
+    const items = document.querySelectorAll('.channel-item');
+    return Array.from(items).map(el => ({
+      name: el.querySelector('.channel-name')?.innerText.trim(),
+      url: el.querySelector('a')?.href
+    }));
+  });
+  await browser.close();
 
-@app.get("/api/playlist", response_class=PlainTextResponse)
-def playlist():
-    res = requests.get('https://okteve.com/channels')
-    soup = BeautifulSoup(res.text, 'html.parser')
-    m3u = "#EXTM3U\n"
-    for item in soup.select('.channel-item'):
-        name = item.select_one('.channel-name').text.strip()
-        url = item.select_one('a')['href']
-        m3u += f"#EXTINF:-1,{name}\n{url}\n"
-    return m3u
+  let m3u = "#EXTM3U\n";
+  channels.forEach(ch => {
+    m3u += `#EXTINF:-1,${ch.name}\n${ch.url}\n`;
+  });
+  res.setHeader('Content-Type', 'audio/x-mpegurl');
+  res.send(m3u);
+};
