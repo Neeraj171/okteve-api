@@ -1,8 +1,17 @@
-from scraper import fetch_channels
+from fastapi import FastAPI
+from fastapi.responses import PlainTextResponse
+import requests
+from bs4 import BeautifulSoup
 
-def handler(request, response):
-    channels = fetch_channels()
+app = FastAPI()
+
+@app.get("/api/playlist", response_class=PlainTextResponse)
+def playlist():
+    res = requests.get('https://okteve.com/channels')
+    soup = BeautifulSoup(res.text, 'html.parser')
     m3u = "#EXTM3U\n"
-    for ch in channels:
-        m3u += f"#EXTINF:-1,{ch['name']}\n{ch['url']}\n"
-    return response.send(m3u, content_type='audio/x-mpegurl')
+    for item in soup.select('.channel-item'):
+        name = item.select_one('.channel-name').text.strip()
+        url = item.select_one('a')['href']
+        m3u += f"#EXTINF:-1,{name}\n{url}\n"
+    return m3u
